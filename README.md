@@ -48,7 +48,7 @@ Before running the application, ensure you have the following:
    Create a .env file in the root directory using the .env.example template and add all required variables:
 
    ```env
-    DJANGO_SETTINGS_MODULE='core.config.local' #for Dev environment
+    DJANGO_SETTINGS_MODULE='devhubs_core.config.local' #for Dev environment
 
     # Sqlite3 database config
     SECRET_KEY='paste db.sqlite3 key here'
