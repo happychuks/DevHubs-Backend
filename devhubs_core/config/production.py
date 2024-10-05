@@ -1,3 +1,4 @@
 from .base import *
 
-DEBUG = bool(config('DJANGO_DEBUG', default=False))
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = False
