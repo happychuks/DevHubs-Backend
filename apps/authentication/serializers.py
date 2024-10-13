@@ -1,97 +1,61 @@
-from rest_framework import serializers
-from django.contrib.auth import get_user_model, authenticate
+from rest_framework_simplejwt.tokens import Token
+from .models import User
 from django.contrib.auth.password_validation import validate_password
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework import serializers
+from rest_framework.validators import UniqueValidator
 from allauth.socialaccount.models import SocialAccount
-from .models import CustomUser
-
-User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
-    """
-    Serializer for User model to serialize user details.
-    """
     class Meta:
-        model = CustomUser
-        fields = ['id', 'username', 'email', 'bio', 'profile_picture']
-        read_only_fields = ['id']
+        model = User
+        fields = ['id', 'username', 'email']
 
-class SignupSerializer(serializers.ModelSerializer):
-    """
-    Serializer for user signup, including password validation.
-    """
-    password = serializers.CharField(write_only=True, required=True)
+class MyTOPS(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        """
+        Dictionary that holds the user's information
+        """
+        token = super().get_token(user)
+
+        if hasattr(user, 'profile'):
+            token['full_name'] = user.profile.full_name
+            token['bio'] = user.profile.bio
+        token['username'] = user.username
+        token['email'] = user.email
+
+        return token
+
+class RegistrationSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
+    password2 = serializers.CharField(write_only=True, required=True)
+    full_name = serializers.CharField(write_only=True, required=True)
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'bio', 'profile_picture']
-        extra_kwargs = {
-            'password': {'write_only': True},
-            'bio': {'required': False},
-            'profile_picture': {'required': False}
-        }
+        fields = ['full_name', 'email', 'username', 'password', 'password2']
 
-    def validate_password(self, value):
-        """
-        Validate the password using Django's built-in validators.
-        """
-        validate_password(value)
-        return value
-
+    def validate(self, attrs):
+        if attrs['password'] != attrs['password2']:
+            raise serializers.ValidationError(
+                {'password':"Password Fields Didn't Match"}
+            )
+        return attrs
+    
     def create(self, validated_data):
-        """
-        Create a new user instance and hash the password.
-        """
-        user = User(
+        user = User.objects.create(
             username=validated_data['username'],
-            email=validated_data['email'],
-            bio=validated_data.get('bio', ''),
-            profile_picture=validated_data.get('profile_picture', '')
+            email=validated_data['email']
         )
         user.set_password(validated_data['password'])
         user.save()
+
+        if "full_name" in validated_data and hasattr(user, 'profile'):
+            user.profile.full_name = validated_data['full_name']
+            user.profile.save()
+
         return user
-
-class LoginSerializer(serializers.Serializer):
-    username_or_email = serializers.CharField()
-    password = serializers.CharField(write_only=True)
-
-    def validate(self, data):
-        username_or_email = data.get('username_or_email')
-        password = data.get('password')
-
-        user = None
-        if User.objects.filter(username=username_or_email).exists():
-            user = authenticate(username=username_or_email, password=password)
-        elif User.objects.filter(email=username_or_email).exists():
-            user = authenticate(email=username_or_email, password=password)
-
-        if user is None:
-            raise serializers.ValidationError("Invalid login credentials.")
-        if not user.is_active:
-            raise serializers.ValidationError("User account is disabled.")
-        data['user'] = user
-        return data
-    
-class PasswordResetSerializer(serializers.Serializer):
-    """
-    Serializer for password reset request, accepting an email address.
-    """
-    email = serializers.EmailField()
-
-class PasswordResetConfirmSerializer(serializers.Serializer):
-    """
-    Serializer for password reset confirmation, checking if new passwords match.
-    """
-    new_password = serializers.CharField(write_only=True)
-    re_new_password = serializers.CharField(write_only=True)
-
-    def validate(self, attrs):
-        """
-        Check if both new password fields match.
-        """
-        if attrs['new_password'] != attrs['re_new_password']:
-            raise serializers.ValidationError("Passwords do not match.")
-        return attrs
 
 class SocialAccountSerializer(serializers.ModelSerializer):
     """
